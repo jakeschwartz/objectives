@@ -1,0 +1,66 @@
+#!/usr/bin/env ruby
+
+=begin
+
+This sync script is a quick hack for couchapp development. It was
+written in node then ported to Ruby since node's file watch seemed
+to have some lag. This is much more responsive and allows faster
+updates. Conflict detection hasn't been added and YAML is abused
+slightly to allow in-place serialization of attachments. This
+could possibly be improved later with objects that serialize
+when converted to JSON.
+
+=end
+
+require 'mime/types'
+require 'net/http'
+require 'rb-fsevent'
+require 'uri'
+require 'yajl'
+require 'yaml'
+
+APPS = ARGV.map {|file| File.expand_path(file)}
+DIRS = APPS.map {|file| File.dirname(file)}.uniq
+
+def extend_domain_types(application)
+  YAML.domain_types = {}
+  YAML.add_domain_type('couchdb', 'attachment') do |type, value|
+    path = File.dirname(application) + "/#{value}"
+    ext = File.extname(path)
+    data = [File.read(path)].pack('m').gsub("\n", '')
+    content_type = (MIME::Types.of(ext).first || 'application/octet-stream').to_s
+    {'content_type' => content_type, 'data' => data}
+  end
+end
+
+def sync(application)
+  puts "updating #{application}"
+  extend_domain_types(application)
+  doc = YAML.load_file(application)
+  return unless doc
+  uri = URI.parse("http://localhost:5984/objectives/#{doc['_id']}")
+  resp = Net::HTTP.get(uri)
+  if resp
+    current = Yajl.load(resp)
+    doc['_rev'] = current['_rev']
+  end
+  Net::HTTP.start(uri.host, uri.port) do |http|
+    req = Net::HTTP::Put.new(uri.path)
+    req.body = Yajl.dump(doc)
+    req.content_type = 'application/json'
+    req['Accept'] = 'application/json'
+    resp = http.request(req)
+  end
+rescue
+  puts "Failed: #{$!}"
+end
+
+if $0 == __FILE__
+  APPS.each {|app| sync(app)}
+  fsevent = FSEvent.new
+  fsevent.watch DIRS do |changes|
+    # It currently overwrites both. We could optimize this.
+    APPS.each {|app| sync(app)}
+  end
+  fsevent.run
+end

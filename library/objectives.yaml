@@ -1,0 +1,15 @@
+---
+_id: _design/objectives
+language: javascript
+_attachments:
+  main.html: !attachment objectives/main.html
+  main.js: !attachment objectives/main.js
+  main.less: !attachment objectives/main.less
+  session.js: !attachment objectives/session.js
+  sign-in.html: !attachment objectives/sign-in.html
+  xhr.js: !attachment objectives/xhr.js
+  # vendor libraries
+  less.js: !attachment vendor/less.js
+  q.js: !attachment vendor/q.js
+  require.js: !attachment vendor/require.js
+  text.js: !attachment vendor/text.js
